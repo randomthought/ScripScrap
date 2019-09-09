@@ -21,7 +21,7 @@ data ScrapeConfig = ScrapeConfig {
   }
   deriving (Show)
 
-data ScrapeMode = NewScrape String | Targeted [String]
+data ScrapeMode = NewScrape String | Targeted String
   deriving (Show)
 
 data AppArgs = AppArgs (ScrapeMode, ScrapeConfig)
@@ -29,11 +29,11 @@ data AppArgs = AppArgs (ScrapeMode, ScrapeConfig)
 
 confParser :: Parser ScrapeConfig
 confParser = ScrapeConfig
-  <$> some (option auto (long "css"
+  <$> some (option str (long "css"
                          <> short 'c'
                          <> metavar "SELECTOR"
                          <> help "A list of CSS Selectors you wish to extract from each url"))
-  <*> some (option auto (long "regex"
+  <*> some (option str (long "regex"
                          <> short 'r'
                          <> metavar "PATTERN"
                          <> help "A list of regex patterns you wish to filter out discovered urls you don't wish to scrape"))
@@ -54,10 +54,10 @@ newScrapeParser = NewScrape
                  <> help "The url to scrape")
 
 targetedScrapeParser = Targeted
-  <$> some (option auto (long "file"
-                         <> short 'f'
-                         <> metavar "FILEDIR"
-                         <> help "Text file containing the list of urls you want to scrape"))
+  <$> strOption (long "file"
+                 <> short 'f'
+                 <> metavar "FILEDIR"
+                 <> help "Text file containing the list of urls you want to scrape")
 
 modeScrapeParser = newScrapeParser <|> targetedScrapeParser
 
@@ -68,25 +68,25 @@ opts = info (appArgsParser <**> helper) fullDesc
 
 main :: IO ()
 main = do
-  options <- execParser opts
-  print options
+  AppArgs (mode, conf) <- execParser opts
+  urlsToProcess <- newTQueueIO :: IO (UrlsToProcess)
+  _ <- populateQueue urlsToProcess mode
+  let workerCount = workers conf
+  currentWorkerCount <- newTVarIO workerCount :: IO (WorkerCount)
+  processedHashes <- newTVarIO Set.empty :: IO (ProcessedHashes)
+  replicateM workerCount $ forkIO $ do
+    _ <- worker urlsToProcess processedHashes currentWorkerCount
+    return ()
 
-  
-  -- arg <- cmdArgs newScrape
-  -- print arg
-  -- urlsToProcess <- newTQueueIO :: IO (UrlsToProcess)
-  -- contents <- readFile $ output arg
-  -- let linesOfFile = lines contents
-  -- mapM_ (atomically . writeTQueue urlsToProcess) (take 10 linesOfFile)
-  -- _ <- atomically $ writeTQueue urlsToProcess (url arg)
-  -- workerCount' <- newTVarIO (workers arg) :: IO (WorkerCount)
-  -- processedHashes <- newTVarIO Set.empty :: IO (ProcessedHashes)
-  -- replicateM (workers arg) $ forkIO $ do
-  --   _ <- worker urlsToProcess processedHashes workerCount'
-  --   return ()
+  whileM_ (f currentWorkerCount) $ threadDelay 1000000
+    where f wc = do
+            currentWorkerCount <- atomically $ readTVar wc
+            let wait = if (currentWorkerCount > 0) then True else False
+            return wait
 
-  -- whileM_ (f workerCount') $ threadDelay 1000000
-  --   where f wc = do
-  --           currentWorkerCount <- atomically $ readTVar wc
-  --           let wait = if (currentWorkerCount > 0) then True else False
-  --           return wait
+populateQueue :: UrlsToProcess -> ScrapeMode -> IO ()
+populateQueue queue (NewScrape url) = atomically $ writeTQueue queue url
+populateQueue queue (Targeted file) = do
+  contents <- readFile file
+  let linesOfFile = lines contents
+  mapM_ (atomically . writeTQueue queue) linesOfFile
