@@ -2,11 +2,11 @@
 {-# LANGUAGE Arrows #-}
 
 module Lib (
-  UrlsToProcess
-, WorkerCount
-, ProcessedHashes
-, worker
+  worker
+, populateQueue
 ) where
+
+import Types
 
 import Prelude hiding (putStrLn)
 import Data.String.Class (putStrLn)
@@ -22,16 +22,6 @@ import Text.XML.HXT.Curl
 import Text.XML.HXT.TagSoup
 import Text.HandsomeSoup
 
-type ProcessedHashes = TVar (Set.Set String)
-
-type UrlsToProcess = TQueue String
-
-type Links = Int
-
-type WorkerCount = TVar Int
-
-data UrlData = UrlData {hash :: String, url :: URLString}
-  deriving (Show, Eq)
 
 -- stringToHash :: String -> UrlData
 -- stringToHash =  error "Not implemented"
@@ -65,23 +55,18 @@ processUrl _ url = do
   putStrLn $ "Url: " ++ url ++ "\nResponse: " ++ show code ++ "\nWith Thread: " ++ show threadid ++ "\n"
   return (0 :: Links)
 
-type Selector = String
-type PageData = String
-
 extractContents :: String -> [Selector] -> [PageData]
 extractContents body s =  error "Need to implement"
-
--- extractLinks :: String -> [URLString]
--- extractLinks c = error "Implement"
 
 extractLinks :: String -> IO [URLString]
 extractLinks body = extract (readString
   [ withParseHTML yes, withWarnings no
   ] body)
+  where extract doc =  runX $ doc //> hasName "a" >>> getAttrValue "href"
 
-extract doc = runX $ doc //> hasName "a" >>> getAttrValue "href"
--- extract doc = runX $ doc >>> xmlFilter "article" >>> xmlFilter "a" >>> toHref
-
--- toHref = proc el -> do
---    link    <- getAttrValue "href" -< el
---    returnA -< link
+populateQueue :: UrlsToProcess -> ScrapeMode -> IO ()
+populateQueue queue (NewScrape url) = atomically $ writeTQueue queue url
+populateQueue queue (Targeted file) = do
+  contents <- readFile file
+  let linesOfFile = lines contents
+  mapM_ (atomically . writeTQueue queue) linesOfFile

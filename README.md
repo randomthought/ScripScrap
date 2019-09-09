@@ -1,2 +1,3 @@
 # LinkScraper
-# LinksScraper-Haskell
+---
+A fast concurrent CLI webscraper built in haskell
