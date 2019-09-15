@@ -19,19 +19,13 @@ import qualified Data.Set as Set
 import Control.Monad.Loops
 import Text.XML.HXT.Core
 import Text.XML.HXT.Curl
-import Text.XML.HXT.TagSoup
 import Text.HandsomeSoup
+import Text.Pretty.Simple (pPrint)
 
-
--- stringToHash :: String -> UrlData
--- stringToHash =  error "Not implemented"
-
--- writeResults :: UrlData -> FilePath -> IO ()
--- writeResults _ _ = putStrLn "Do"
 
 worker :: UrlsToProcess -> ProcessedHashes -> WorkerCount -> IO Int
 worker queue processed workerCount =
-  let lessThan5      = (5 <)
+  let lessThan5        = (5 <)
       decrimentWorkers = do
           _ <- atomically $ modifyTVar' workerCount (\n -> n - 1)
           return ()
@@ -47,22 +41,26 @@ worker queue processed workerCount =
 
 processUrl:: ProcessedHashes -> URLString -> IO Links
 processUrl _ url = do
-  let curlOptions = [CurlTimeout 3, CurlFollowLocation True, CurlMaxRedirs 5]
+  let curlOptions = [CurlTimeout 3, CurlFollowLocation True, CurlMaxRedirs 2]
   (code, body) <- curlGetString url curlOptions
-  l <- extractLinks body
-  print l
+  let urlData = scrapeDocument body [".storylink", ".sitestr"] url
+  pPrint urlData
   threadid <- myThreadId
   putStrLn $ "Url: " ++ url ++ "\nResponse: " ++ show code ++ "\nWith Thread: " ++ show threadid ++ "\n"
   return (0 :: Links)
 
-extractContents :: String -> [Selector] -> [PageData]
-extractContents body s =  error "Need to implement"
+extractLinks :: PageData -> [URLString]
+extractLinks doc = runLA (hread >>> css "a" ! "href") doc
 
-extractLinks :: String -> IO [URLString]
-extractLinks body = extract (readString
-  [ withParseHTML yes, withWarnings no
-  ] body)
-  where extract doc =  runX $ doc //> hasName "a" >>> getAttrValue "href"
+scrapeDocument :: PageData -> [Selector] -> URLString -> UrlData
+scrapeDocument doc ss u = UrlData { url = u , matches = ms}
+  where ms  = map f ss
+        f s = let docs = extractContent doc s
+          in Matches { selector = s, name = "TODO", documents = docs }
+        
+
+extractContent :: PageData -> Selector -> [String]
+extractContent doc s = runLA (hread >>> css s //> getText) doc
 
 populateQueue :: UrlsToProcess -> ScrapeMode -> IO ()
 populateQueue queue (NewScrape url) = atomically $ writeTQueue queue url

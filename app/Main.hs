@@ -32,4 +32,3 @@ main = do
             currentWorkerCount <- atomically $ readTVar wc
             let wait = if (currentWorkerCount > 0) then True else False
             return wait
-

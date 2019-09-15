@@ -30,14 +30,11 @@ dependencies:
 - monad-loops
 - curl
 - text
-- html-conduit
-- xml-conduit
-- cmdargs
 - hxt
 - hxt-curl
-- hxt-tagsoup
 - HandsomeSoup
 - optparse-applicative
+- pretty-simple
 
 library:
   source-dirs: src

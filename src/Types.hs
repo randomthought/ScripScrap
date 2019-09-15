@@ -21,8 +21,18 @@ type Links = Int
 
 type WorkerCount = TVar Int
 
-data UrlData = UrlData {hash :: String, url :: URLString}
+data Matches = Matches
+  { selector :: Selector
+  , name :: String
+  , documents :: [String]
+  }
   deriving (Show, Eq)
+
+data UrlData = UrlData
+  { url :: URLString
+  , matches :: [Matches]
+  }
+ deriving (Show, Eq)
 
 data ScrapeConfig = ScrapeConfig {
    cssSelectors :: [String]
