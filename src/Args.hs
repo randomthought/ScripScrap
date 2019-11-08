@@ -10,40 +10,23 @@ import Types
 import Options.Applicative
 import Data.Semigroup ((<>))
 
-confParser :: Parser ScrapeConfig
-confParser = ScrapeConfig
-  <$> some (option str (long "css"
-                         <> short 'c'
-                         <> metavar "SELECTOR"
-                         <> help "A list of CSS Selectors you wish to extract from each url"))
-  <*> some (option str (long "regex"
-                         <> short 'r'
-                         <> metavar "PATTERN"
-                         <> help "A list of regex patterns you wish to filter out discovered urls you don't wish to scrape"))
-  <*> option auto (long "workers"
-                   <> short 'w'
-                   <> value 3
-                   <> metavar "INT"
-                   <> help "Number of worker threads you wish to use")
-  <*> strOption (long "output"
-                   <> short 'o'
-                   <> metavar "FILEDIR"
-                   <> help "Location where you wish to store the scrapped contents")
+data ScrapeMode = New FilePath | Resume FilePath
+  deriving(Show)
 
-newScrapeParser = NewScrape
-  <$> strOption (long "url"
-                 <> short 'u'
-                   <> metavar "URL"
-                 <> help "The url to scrape")
-
-targetedScrapeParser = Targeted
+newScrapeParser :: Parser ScrapeMode
+newScrapeParser = New
   <$> strOption (long "file"
                  <> short 'f'
                  <> metavar "FILEDIR"
-                 <> help "Text file containing the list of urls you want to scrape")
+                 <> help "Location to save the scraped data.")
 
-modeScrapeParser = newScrapeParser <|> targetedScrapeParser
+resumeScrapeParser :: Parser ScrapeMode
+resumeScrapeParser = Resume
+  <$> strOption (long "resume-file"
+                 <> short 'r'
+                 <> metavar "FILEDIR"
+                 <> help "File containing the previously scrapped data for resuming purposes.")
 
-appArgsParser = AppArgs <$> liftA2 (,) modeScrapeParser confParser
+modeScrapeParser = newScrapeParser <|> resumeScrapeParser
 
-opts = info (appArgsParser <**> helper) fullDesc
+opts = info (modeScrapeParser <**> helper) fullDesc

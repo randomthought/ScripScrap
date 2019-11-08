@@ -1,5 +1,6 @@
 flags: {}
 packages:
 - .
-extra-deps: []
-resolver: lts-13.11
+extra-deps:
+  - bloomfilter-2.0.1.0@sha256:5b67d765315fb2abc1cde85e3c20ae1badfbe8d1070ed57525b7c428586e2d2f,1728
+resolver: lts-14.13

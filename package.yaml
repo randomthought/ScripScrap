@@ -21,20 +21,24 @@ description:         Please see the README on GitHub at <https://github.com/rand
 
 dependencies:
 - base >= 4.7 && < 5
-- scalpel == 0.5.1
-- stm == 2.5.0.0
+- scalpel
+- stm
 - containers
 - bytestring
 - string-class
 - tagsoup
 - monad-loops
-- curl
+- curl == 1.3.8
 - text
 - hxt
 - hxt-curl
 - HandsomeSoup
 - optparse-applicative
 - pretty-simple
+- mtl
+- bloomfilter
+- lens
+# - transformers-base
 
 library:
   source-dirs: src
