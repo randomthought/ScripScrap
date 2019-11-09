@@ -10,8 +10,6 @@ import Types
 import Options.Applicative
 import Data.Semigroup ((<>))
 
-data ScrapeMode = New FilePath | Resume FilePath
-  deriving(Show)
 
 newScrapeParser :: Parser ScrapeMode
 newScrapeParser = New

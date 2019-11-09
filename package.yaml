@@ -38,7 +38,8 @@ dependencies:
 - mtl
 - bloomfilter
 - lens
-# - transformers-base
+- yaml
+- aeson
 
 library:
   source-dirs: src

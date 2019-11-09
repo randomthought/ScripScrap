@@ -18,6 +18,11 @@ import Control.Concurrent.STM
 import qualified Data.Text as T
 import qualified Data.BloomFilter as B
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
+import Data.BloomFilter.Hash
+import qualified Data.Set as S
+import Data.Yaml
+import Data.Yaml.Config
+import Data.Aeson (withObject)
 
 type CssSelector = T.Text
 
@@ -29,11 +34,19 @@ type Url = T.Text
 
 type WorkerCount = TVar Int
 
-data Selector = Match {
+data ScrapeMode = New FilePath | Resume FilePath
+  deriving(Show)
+
+data Selector = Selector {
     _selector :: CssSelector
   , _name :: T.Text
   }
   deriving (Show, Eq)
+
+instance FromJSON Selector where
+  parseJSON = withObject  "Selector" $ \m -> Selector
+    <$> m .: "selector"
+    <*> m .: "name"
 
 data Matches = Matches
   { selector :: Selector
@@ -73,18 +86,34 @@ data Target = Target
   deriving (Show, Eq)
 -- makeClassy ''Target
 
+instance FromJSON Target where
+  parseJSON = withObject  "env" $ \m -> Target
+    <$> m .: "targetId"
+    <*> m .: "startingUrl"
+    <*> m .: "domain"
+    <*> m .: "selectors"
+    <*> m .:? "excludePatterns" .!= []
+    <*> m .:? "includePatterns"  .!= []
+
 data Env = Env {
     _workers :: Int
   , _output :: FilePath
   , _targets :: [Target]
   }
+  deriving Show
 makeClassy ''Env
+
+instance FromJSON Env where
+  parseJSON = withObject  "env" $ \m -> Env
+    <$> m .:? "workers" .!= 5
+    <*> m .: "output"
+    <*> m .: "targets"
 
 data AppContext = AppContext {
     _apEnv :: Env
   , _apDb :: !(TVar FilePath)
   , _apQueue :: !(TQueue QuedUrl)
-  , _apProccessedUrls ::  !(TVar (B.Bloom T.Text))
+  , _apProccessedUrls ::  !(TVar (S.Set Url))
   , workerCount :: !(TVar Int)
   }
 makeClassy ''AppContext
@@ -113,7 +142,7 @@ instance DataSource AppIO where
   notInSource a = do
     mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
-    return $ B.notElem a processed
+    return $ S.notMember a processed
 
 
 class Monad m => Queue m where
