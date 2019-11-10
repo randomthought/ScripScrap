@@ -6,6 +6,7 @@
 {-# LANGUAGE ConstraintKinds #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
+{-# LANGUAGE DeriveGeneric #-}
 -- |
 
 module Types where
@@ -16,6 +17,7 @@ import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
 import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
+import qualified Data.ByteString as B
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
 import qualified Data.Set as S
 import Data.Yaml
@@ -24,11 +26,10 @@ import Data.Aeson (withObject)
 import Control.Monad.Except
 import qualified Control.Exception as E
 import Control.Monad.IO.Unlift
--- import Control.Monad.Trans.Control
 import Data.Maybe
 import Network.URI.TLD (parseTLDText)
 import Data.Aeson.Types (Parser)
--- import qualified Data.HashMap.Strict as H
+import GHC.Generics
 
 type Configs = FilePath
 type OutPut = FilePath
@@ -50,23 +51,36 @@ type Links = Int
 
 type Url = T.Text
 
-data Selector = Selector {
+data SelectorProfile = Selector {
     _selector :: CssSelector
   , _name :: T.Text
   }
-  deriving (Show, Eq)
+  deriving (Generic, Show, Eq)
 
-instance FromJSON Selector where
+instance FromJSON SelectorProfile where
   parseJSON = withObject  "Selector" $ \m -> Selector
     <$> m .: "selector"
     <*> m .: "name"
 
+instance ToJSON SelectorProfile where
+  toJSON selectorProfile = object [
+    "selector" .= _selector selectorProfile
+    , "name" .= _name selectorProfile
+    ]
+
 data Matches = Matches
-  { selector :: Selector
+  { selector :: SelectorProfile
   , name :: T.Text
   , documents :: [T.Text]
   }
   deriving (Show, Eq)
+
+instance ToJSON Matches where
+  toJSON matches = object [
+      "selector" .= selector matches
+    , "name" .= name matches
+    , "documents" .= documents matches
+    ]
 
 type ResponseCode = Int
 
@@ -77,6 +91,15 @@ data UrlData = UrlData {
   , matches :: [Matches]
   }
  deriving (Show, Eq)
+
+instance ToJSON UrlData where
+  toJSON urlData = object [
+      "url" .= url urlData
+    , "responseCode" .= responseCode urlData
+    , "targetId" .= targetId urlData
+    , "matches" .= matches urlData
+    ]
+
 
 type Domain = T.Text
 
@@ -92,21 +115,12 @@ data Target = Target
     _targetId :: TargetId
   , _startingUrl :: String
   , _urlSplit :: UrlSplit
-  , _selectors :: [Selector]
+  , _selectors :: [SelectorProfile]
   , _excludePatterns :: [Pattern]
   , _includePatterns :: [Pattern]
   }
   deriving (Show, Eq)
--- makeClassy ''Target
 
--- instance FromJSON Target where
---   parseJSON = withObject  "env" $ \m -> Target
---     <$> m .: "targetId"
---     <*> m .: "startingUrl"
---     <*> m .: "domain"
---     <*> m .: "selectors"
---     <*> m .:? "excludePatterns" .!= []
---     <*> m .:? "includePatterns"  .!= []
 instance FromJSON Target where
   parseJSON = withObject  "env" $ \m -> do
     targetId_ <- m .: "targetId"
@@ -174,7 +188,7 @@ class Monad m => DataSource m where
 instance DataSource AppIO where
   storeToSource a = do
     mPath <- asks _apDb
-    liftIO $ print (show a)
+    liftIO $ B.putStrLn (encode a)
     -- path <- liftIO $ atomically (readTVar mPath)
     -- liftIO $ writeFile path (show a)
   notProcessed a = do

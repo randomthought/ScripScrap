@@ -69,8 +69,8 @@ processUrl qUrl@(id, url) = do
               $ extractLinks body
   newUrls <- filterM notProcessed links
   mapM_ (\url' -> push (id, url')) newUrls
-  threadid <- liftIO myThreadId
-  logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
+  -- threadid <- liftIO myThreadId
+  -- logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
 
 
 getTarget :: TargetId -> [Target] -> Target
@@ -104,7 +104,7 @@ extractLinks doc = map T.pack links
     links = runLA (hread >>> css "a" ! "href") doc
 
 
-scrapeDocument :: [Selector] -> PageData -> ResponseCode -> QuedUrl -> Maybe UrlData
+scrapeDocument :: [SelectorProfile] -> PageData -> ResponseCode -> QuedUrl -> Maybe UrlData
 scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . documents) $ map f ss
                                          f s = let cssSelector = _selector s
                                                    docs = map T.pack $ extractContent cssSelector doc
