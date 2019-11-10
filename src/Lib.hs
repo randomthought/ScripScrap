@@ -14,9 +14,7 @@ import Control.Lens.Getter (view)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Trans
--- import Data.String.Class (putStrLn)
 import Data.Text.Internal (showText)
--- import Prelude hiding (putStrLn)
 import Text.HandsomeSoup
 import Text.XML.HXT.Core
 import Text.XML.HXT.Curl
@@ -24,8 +22,10 @@ import qualified Data.Text as T
 import Control.Monad.Reader.Class (MonadReader)
 import Control.Lens.Getter
 import Control.Monad.Reader
-
-
+import Text.Regex.TDFA
+import Network.URI.TLD (parseTLDText)
+import Data.Maybe
+import Debug.Trace as DT
 
 worker :: (DataSource m
           , HasEnv t
@@ -59,12 +59,16 @@ processUrl qUrl@(id, url) = do
   let target = getTarget id (env ^. targets)
   let css = _selectors $ target
   let urlData = scrapeDocument css body rc qUrl
+  storeProcessed url
   maybe (pure ()) storeToSource urlData
-  let patterns = _excludePatterns target
-  let d = _domain target
-  let links = filter (linkIsEligable d patterns) $ extractLinks body
-  newUrls <- filterM notInSource links
-  mapM_ (\url -> push (id, url)) newUrls
+  let links = map T.pack
+              $ filter (\x -> all (not . (x =~)) (_excludePatterns target))
+              $ filter (\x -> all (x =~) (_includePatterns target))
+              $ map T.unpack
+              $ urlCleanse (_urlSplit target)
+              $ extractLinks body
+  newUrls <- filterM notProcessed links
+  mapM_ (\url' -> push (id, url')) newUrls
   threadid <- liftIO myThreadId
   logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
 
@@ -72,10 +76,27 @@ processUrl qUrl@(id, url) = do
 getTarget :: TargetId -> [Target] -> Target
 getTarget id targets = head $ filter ((==) id . _targetId) targets
 
+urlCleanse :: UrlSplit -> [Url] -> [Url]
+urlCleanse uSpl@(_, domain, tld) urls
+  = mapMaybe matchDomain fixedUrls
+  where fixedUrls = map (fixUrlFormat uSpl) $ filter (\x -> length (T.unpack x) > 0) urls
+        matchDomain s = do (_, domain', tld') <- parseTLDText s
+                           if (tld == tld') && (domain == domain')
+                             then Just (s) else Nothing
+
+
+fixUrlFormat :: UrlSplit -> Url -> Url
+fixUrlFormat (subDom, domain, tld) url
+  = let dom = if subDom == "" then "https://" ++ (T.unpack domain) ++ "." ++ (T.unpack tld)
+             else "https://" ++ (T.unpack subDom) ++ "." ++ (T.unpack domain) ++ "." ++ (T.unpack tld)
+        url' = T.unpack url
+    in case parseTLDText url of
+         Just a ->  url
+         Nothing -> T.pack $ dom ++ "/" ++ url'
+
 
 linkIsEligable :: Domain -> [Pattern] -> Url -> Bool
-linkIsEligable d ps url = True
-
+linkIsEligable d ps url = error "Not implemented"
 
 extractLinks :: PageData -> [Url]
 extractLinks doc = map T.pack links

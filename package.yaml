@@ -44,7 +44,8 @@ dependencies:
 - unliftio-core
 - monad-control
 - easy-file
-# - tld == 0.3.0.2
+- regex-tdfa
+- tld
 
 library:
   source-dirs: src

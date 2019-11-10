@@ -25,11 +25,20 @@ import Control.Monad.Except
 import qualified Control.Exception as E
 import Control.Monad.IO.Unlift
 -- import Control.Monad.Trans.Control
-
+import Data.Maybe
+import Network.URI.TLD (parseTLDText)
+import Data.Aeson.Types (Parser)
+-- import qualified Data.HashMap.Strict as H
 
 type Configs = FilePath
 type OutPut = FilePath
 type Resume = Bool
+
+type Subdomain = T.Text
+
+type TLD = T.Text
+
+type UrlSplit = (Subdomain, Domain, TLD)
 
 data Options = Options Configs OutPut Resume
 
@@ -82,7 +91,7 @@ data Target = Target
   {
     _targetId :: TargetId
   , _startingUrl :: String
-  , _domain :: Domain
+  , _urlSplit :: UrlSplit
   , _selectors :: [Selector]
   , _excludePatterns :: [Pattern]
   , _includePatterns :: [Pattern]
@@ -90,14 +99,23 @@ data Target = Target
   deriving (Show, Eq)
 -- makeClassy ''Target
 
+-- instance FromJSON Target where
+--   parseJSON = withObject  "env" $ \m -> Target
+--     <$> m .: "targetId"
+--     <*> m .: "startingUrl"
+--     <*> m .: "domain"
+--     <*> m .: "selectors"
+--     <*> m .:? "excludePatterns" .!= []
+--     <*> m .:? "includePatterns"  .!= []
 instance FromJSON Target where
-  parseJSON = withObject  "env" $ \m -> Target
-    <$> m .: "targetId"
-    <*> m .: "startingUrl"
-    <*> m .: "domain"
-    <*> m .: "selectors"
-    <*> m .:? "excludePatterns" .!= []
-    <*> m .:? "includePatterns"  .!= []
+  parseJSON = withObject  "env" $ \m -> do
+    targetId_ <- m .: "targetId"
+    startingUrl_ <- m .: "startingUrl"
+    let urlSplit_ = fromJust $ parseTLDText (T.pack startingUrl_)
+    selectors_ <- m .: "selectors"
+    excludedPatterns_ <- m .:? "excludePatterns" .!= []
+    includedPatterns_ <- m .:? "includePatterns"  .!= []
+    return $ Target targetId_ startingUrl_ urlSplit_ selectors_ excludedPatterns_ includedPatterns_
 
 data Env = Env {
     _workers :: Int
@@ -150,18 +168,22 @@ instance HasEnv AppContext where
 
 class Monad m => DataSource m where
   storeToSource :: UrlData -> m ()
-  notInSource :: T.Text -> m Bool
+  notProcessed :: T.Text -> m Bool
+  storeProcessed :: T.Text -> m ()
 
 instance DataSource AppIO where
   storeToSource a = do
     mPath <- asks _apDb
-    -- liftIO$ print (show a)
-    path <- liftIO $ atomically (readTVar mPath)
-    liftIO $ writeFile path (show a)
-  notInSource a = do
+    liftIO $ print (show a)
+    -- path <- liftIO $ atomically (readTVar mPath)
+    -- liftIO $ writeFile path (show a)
+  notProcessed a = do
     mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
     return $ S.notMember a processed
+  storeProcessed a = do
+    mProcessed <- asks _apProccessedUrls
+    liftIO $ atomically (modifyTVar mProcessed $ S.insert a)
 
 
 class Monad m => Queue m where
