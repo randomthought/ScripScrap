@@ -16,13 +16,22 @@ import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
 import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
-import qualified Data.BloomFilter as B
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
-import Data.BloomFilter.Hash
 import qualified Data.Set as S
 import Data.Yaml
 import Data.Yaml.Config
 import Data.Aeson (withObject)
+import Control.Monad.Except
+import qualified Control.Exception as E
+import Control.Monad.IO.Unlift
+-- import Control.Monad.Trans.Control
+
+
+type Configs = FilePath
+type OutPut = FilePath
+type Resume = Bool
+
+data Options = Options Configs OutPut Resume
 
 type CssSelector = T.Text
 
@@ -31,11 +40,6 @@ type PageData = String
 type Links = Int
 
 type Url = T.Text
-
-type WorkerCount = TVar Int
-
-data ScrapeMode = New FilePath | Resume FilePath
-  deriving(Show)
 
 data Selector = Selector {
     _selector :: CssSelector
@@ -114,13 +118,27 @@ data AppContext = AppContext {
   , _apDb :: !(TVar FilePath)
   , _apQueue :: !(TQueue QuedUrl)
   , _apProccessedUrls ::  !(TVar (S.Set Url))
-  , workerCount :: !(TVar Int)
+  , _apWorkerCount :: !(TVar Int)
   }
 makeClassy ''AppContext
 
+
+data AppError = IOError String
+  deriving Show
+
+
 newtype AppIO a =
+  -- AppIO { unAppIO :: ReaderT AppContext (ExceptT AppError IO) a }
   AppIO { unAppIO :: ReaderT AppContext IO a }
-  deriving (Functor, Applicative, Monad, MonadReader AppContext, MonadIO) -- MonadUnliftIO)
+  deriving (Functor
+           , Applicative
+           , Monad
+           , MonadReader AppContext
+           , MonadIO
+           , MonadUnliftIO
+           -- , MonadError AppError
+           )
+           -- , MonadBaseControl IO) -- MonadUnliftIO)
 
 instance HasEnv AppContext where
   output = apEnv . output
@@ -137,6 +155,7 @@ class Monad m => DataSource m where
 instance DataSource AppIO where
   storeToSource a = do
     mPath <- asks _apDb
+    -- liftIO$ print (show a)
     path <- liftIO $ atomically (readTVar mPath)
     liftIO $ writeFile path (show a)
   notInSource a = do
@@ -161,7 +180,7 @@ class Monad m => Logger m where
   logMessage :: Show a => a -> m ()
 
 instance Logger AppIO where
-  logMessage a = liftIO $ print a
+  logMessage a = liftIO $ putStrLn $ show a
 
 
 type Response = (ResponseCode, String)
@@ -184,8 +203,8 @@ class (Monad m) => WorkerState m where
 
 instance WorkerState AppIO where
   decrimentWorkerCount = do
-    count <- asks workerCount
+    count <- asks _apWorkerCount
     liftIO $ atomically (modifyTVar count (1 -))
   currentWorkerCount = do
-    count <- asks workerCount
+    count <- asks _apWorkerCount
     liftIO $ atomically (readTVar count)

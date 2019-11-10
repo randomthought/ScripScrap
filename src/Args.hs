@@ -11,20 +11,19 @@ import Options.Applicative
 import Data.Semigroup ((<>))
 
 
-newScrapeParser :: Parser ScrapeMode
-newScrapeParser = New
+
+scrapeParser :: Parser Options
+scrapeParser = Options
   <$> strOption (long "file"
                  <> short 'f'
                  <> metavar "FILEDIR"
-                 <> help "Location to save the scraped data.")
-
-resumeScrapeParser :: Parser ScrapeMode
-resumeScrapeParser = Resume
-  <$> strOption (long "resume-file"
-                 <> short 'r'
+                 <> help "Location of your configuration yaml")
+  <*> strOption (long "output"
+                 <> short 'o'
                  <> metavar "FILEDIR"
-                 <> help "File containing the previously scrapped data for resuming purposes.")
+                 <> help "Location to save the scraped data.")
+  <*> switch (long "resume"
+                 <> short 'r'
+                 <> help "Indicate if this is a resume session")
 
-modeScrapeParser = newScrapeParser <|> resumeScrapeParser
-
-opts = info (modeScrapeParser <**> helper) fullDesc
+opts = info (scrapeParser <**> helper) fullDesc

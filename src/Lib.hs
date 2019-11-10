@@ -14,17 +14,18 @@ import Control.Lens.Getter (view)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Trans
-import Data.String.Class (putStrLn)
+-- import Data.String.Class (putStrLn)
 import Data.Text.Internal (showText)
-import Prelude hiding (putStrLn)
+-- import Prelude hiding (putStrLn)
 import Text.HandsomeSoup
-import Text.Pretty.Simple (pPrint)
 import Text.XML.HXT.Core
 import Text.XML.HXT.Curl
 import qualified Data.Text as T
 import Control.Monad.Reader.Class (MonadReader)
 import Control.Lens.Getter
 import Control.Monad.Reader
+
+
 
 worker :: (DataSource m
           , HasEnv t
@@ -44,6 +45,7 @@ worker = iterateUntilM lessThan5 work 0 >> pure ()
                        _          <- if lessThan5 n' then decrimentWorkerCount else pure ()
                        return n'
 
+
 processUrl :: (DataSource m
               , HasEnv t
               , Logger m
@@ -57,22 +59,23 @@ processUrl qUrl@(id, url) = do
   let target = getTarget id (env ^. targets)
   let css = _selectors $ target
   let urlData = scrapeDocument css body rc qUrl
-  storeToSource urlData
+  maybe (pure ()) storeToSource urlData
   let patterns = _excludePatterns target
   let d = _domain target
   let links = filter (linkIsEligable d patterns) $ extractLinks body
   newUrls <- filterM notInSource links
   mapM_ (\url -> push (id, url)) newUrls
   threadid <- liftIO myThreadId
-  -- logMessage $ "Url: " ++ url ++ "\nResponse: " ++ show code ++ "\nWith Thread: " ++ show threadid ++ "\n"
   logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
+
 
 getTarget :: TargetId -> [Target] -> Target
 getTarget id targets = head $ filter ((==) id . _targetId) targets
 
 
 linkIsEligable :: Domain -> [Pattern] -> Url -> Bool
-linkIsEligable = error "Not implemented"
+linkIsEligable d ps url = True
+
 
 extractLinks :: PageData -> [Url]
 extractLinks doc = map T.pack links
@@ -80,17 +83,13 @@ extractLinks doc = map T.pack links
     links = runLA (hread >>> css "a" ! "href") doc
 
 
-scrapeDocument :: [Selector] -> PageData -> ResponseCode -> QuedUrl -> UrlData
-scrapeDocument ss doc rc (id, url) = UrlData {
-    url = url
-  , matches = ms
-  , targetId = id
-  , responseCode = rc
-  }
-  where ms  = map f ss
-        f s = let cssSelector = _selector s
-                  docs = map T.pack $ extractContent cssSelector doc
-              in Matches { selector = s, name = (_name s), documents = docs }
+scrapeDocument :: [Selector] -> PageData -> ResponseCode -> QuedUrl -> Maybe UrlData
+scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . documents) $ map f ss
+                                         f s = let cssSelector = _selector s
+                                                   docs = map T.pack $ extractContent cssSelector doc
+                                               in Matches { selector = s, name = (_name s), documents = docs }
+                                     in if null matches then Nothing
+                                        else Just $ UrlData { url = url, matches = matches, targetId = id, responseCode = rc}
 
 
 extractContent :: CssSelector -> PageData -> [String]

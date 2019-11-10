@@ -21,7 +21,6 @@ description:         Please see the README on GitHub at <https://github.com/rand
 
 dependencies:
 - base >= 4.7 && < 5
-- scalpel
 - stm
 - containers
 - bytestring
@@ -34,12 +33,18 @@ dependencies:
 - hxt-curl
 - HandsomeSoup
 - optparse-applicative
-- pretty-simple
+# - pretty-simple
 - mtl
-- bloomfilter
+# - bloomfilter
 - lens
 - yaml
 - aeson
+- transformers-base
+- unliftio
+- unliftio-core
+- monad-control
+- easy-file
+# - tld == 0.3.0.2
 
 library:
   source-dirs: src
