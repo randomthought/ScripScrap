@@ -17,7 +17,7 @@ import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
 import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Char8 as C
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
 import qualified Data.Set as S
 import Data.Yaml
@@ -31,6 +31,9 @@ import Network.URI.TLD (parseTLDText)
 import Data.Aeson.Types (Parser)
 import GHC.Generics
 
+
+
+
 type Configs = FilePath
 type OutPut = FilePath
 type Resume = Bool
@@ -43,7 +46,7 @@ type UrlSplit = (Subdomain, Domain, TLD)
 
 data Options = Options Configs OutPut Resume
 
-type CssSelector = T.Text
+type CssSelector = String
 
 type PageData = String
 
@@ -52,20 +55,20 @@ type Links = Int
 type Url = T.Text
 
 data SelectorProfile = Selector {
-    _selector :: CssSelector
-  , _name :: T.Text
+    _name :: T.Text
+  , _selector :: CssSelector
   }
   deriving (Generic, Show, Eq)
 
 instance FromJSON SelectorProfile where
   parseJSON = withObject  "Selector" $ \m -> Selector
-    <$> m .: "selector"
-    <*> m .: "name"
+    <$> m .: "name"
+    <*> m .: "selector"
 
 instance ToJSON SelectorProfile where
   toJSON selectorProfile = object [
-    "selector" .= _selector selectorProfile
-    , "name" .= _name selectorProfile
+        "name" .= _name selectorProfile
+      , "selector" .= _selector selectorProfile
     ]
 
 data Matches = Matches
@@ -77,26 +80,26 @@ data Matches = Matches
 
 instance ToJSON Matches where
   toJSON matches = object [
-      "selector" .= selector matches
-    , "name" .= name matches
+      "name" .= name matches
+    , "selector" .= selector matches
     , "documents" .= documents matches
     ]
 
 type ResponseCode = Int
 
 data UrlData = UrlData {
-    url :: T.Text
+    targetId :: Int
+  , url :: T.Text
   , responseCode :: ResponseCode
-  , targetId :: Int
   , matches :: [Matches]
   }
  deriving (Show, Eq)
 
 instance ToJSON UrlData where
   toJSON urlData = object [
-      "url" .= url urlData
+      "targetId" .= targetId urlData
+    , "url" .= url urlData
     , "responseCode" .= responseCode urlData
-    , "targetId" .= targetId urlData
     , "matches" .= matches urlData
     ]
 
@@ -188,7 +191,7 @@ class Monad m => DataSource m where
 instance DataSource AppIO where
   storeToSource a = do
     mPath <- asks _apDb
-    liftIO $ B.putStrLn (encode a)
+    liftIO $ C.putStrLn (encode a)
     -- path <- liftIO $ atomically (readTVar mPath)
     -- liftIO $ writeFile path (show a)
   notProcessed a = do
@@ -231,7 +234,6 @@ instance Requests AppIO where
     let code = respStatus resp
     let body = respBody resp
     return (code, body)
-
 
 class (Monad m) => WorkerState m where
   decrimentWorkerCount :: m ()

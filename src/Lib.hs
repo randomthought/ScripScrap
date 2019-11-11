@@ -15,8 +15,9 @@ import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Trans
 import Data.Text.Internal (showText)
-import Text.HandsomeSoup
+import qualified Text.HandsomeSoup as HS
 import Text.XML.HXT.Core
+import Text.XML.HXT.CSS
 import Text.XML.HXT.Curl
 import qualified Data.Text as T
 import Control.Monad.Reader.Class (MonadReader)
@@ -69,8 +70,8 @@ processUrl qUrl@(id, url) = do
               $ extractLinks body
   newUrls <- filterM notProcessed links
   mapM_ (\url' -> push (id, url')) newUrls
-  -- threadid <- liftIO myThreadId
-  -- logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
+  threadid <- liftIO myThreadId
+  logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
 
 
 getTarget :: TargetId -> [Target] -> Target
@@ -92,7 +93,7 @@ fixUrlFormat (subDom, domain, tld) url
         url' = T.unpack url
     in case parseTLDText url of
          Just a ->  url
-         Nothing -> T.pack $ dom ++ "/" ++ url'
+         Nothing -> T.pack $ dom ++ url'
 
 
 linkIsEligable :: Domain -> [Pattern] -> Url -> Bool
@@ -101,7 +102,7 @@ linkIsEligable d ps url = error "Not implemented"
 extractLinks :: PageData -> [Url]
 extractLinks doc = map T.pack links
   where
-    links = runLA (hread >>> css "a" ! "href") doc
+    links = runLA (hread >>> HS.css "a" HS.! "href") doc
 
 
 scrapeDocument :: [SelectorProfile] -> PageData -> ResponseCode -> QuedUrl -> Maybe UrlData
@@ -114,5 +115,4 @@ scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . document
 
 
 extractContent :: CssSelector -> PageData -> [String]
-extractContent s doc = runLA (hread >>> css selector //> getText) doc
-  where selector = T.unpack s
+extractContent s doc = runLA (hread >>> css s //> getText) doc
