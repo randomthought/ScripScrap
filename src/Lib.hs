@@ -28,6 +28,9 @@ import Network.URI.TLD (parseTLDText)
 import Data.Maybe
 import Debug.Trace as DT
 
+
+
+
 worker :: (DataSource m
           , HasEnv t
           , Logger m

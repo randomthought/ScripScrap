@@ -18,10 +18,6 @@ scrapeParser = Options
                  <> short 'f'
                  <> metavar "FILEDIR"
                  <> help "Location of your configuration yaml")
-  <*> strOption (long "output"
-                 <> short 'o'
-                 <> metavar "FILEDIR"
-                 <> help "Location to save the scraped data.")
   <*> switch (long "resume"
                  <> short 'r'
                  <> help "Indicate if this is a resume session")

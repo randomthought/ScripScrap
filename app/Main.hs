@@ -21,20 +21,18 @@ import Data.Either
 import Control.Monad.Except
 import qualified Control.Exception as E
 import System.EasyFile -- (getPermissions, takeDirectorym, Permissions(..))
+import System.IO
 
 renderError :: AppError -> IO ()
 renderError e = do
     putStrLn $ "There was an error:" ++ show e
 
 makeAppConfigs :: Options -> IO (Either AppError AppContext)
-makeAppConfigs (Options c o r) = do
+makeAppConfigs (Options c r) = do
   e <- decodeFileEither c :: IO (Either ParseException Env)
-  p <- (getPermissions . takeDirectory) o
-  let outPutRightable = writable p
-  c <- case (e, outPutRightable) of
-        (Right env, True) -> pure . Right =<< makeAppContext env
-        (Left e, _) -> pure $ Left (IOError ("\n\tParse error: " ++ show e))
-        (_, False) -> pure $ Left (IOError ("\n\tPermissions error: unable to write to" ++ show o))
+  c <- case e of
+        (Right env) -> pure . Right =<< makeAppContext env
+        (Left e ) -> pure $ Left (IOError ("\n\tParse error: " ++ show e))
   return c
 
 restoreAppContext :: AppContext -> IO (Either AppContext Env)
@@ -43,7 +41,7 @@ restoreAppContext ac = error "Not Implemented"
 
 makeAppContext :: Env -> IO AppContext
 makeAppContext env = do
-  apDb <- newTVarIO (_output env)
+  apDb <- openFile (_output env) AppendMode
   apProccessedUrls <- newTVarIO S.empty :: IO (TVar (S.Set Url))
   let urlsQ = S.fromList $ map (\x -> (_targetId x, (T.pack . _startingUrl) x)) (_targets env)
   apQueue <- newTQueueIO :: IO (TQueue QuedUrl)
@@ -77,3 +75,8 @@ main :: IO ()
 main = either renderError runProgram
      =<< makeAppConfigs
      =<< execParser opts
+
+-- main :: IO ()
+-- main = do
+--   (Options a b c) <- execParser opts
+--   writeFile b "hello"

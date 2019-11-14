@@ -22,7 +22,7 @@ import Control.Lens.TH (makeClassy, makeClassyPrisms)
 import qualified Data.Set as S
 import Data.Yaml
 import Data.Yaml.Config
-import Data.Aeson (withObject)
+-- import qualified Data.Aeson as A
 import Control.Monad.Except
 import qualified Control.Exception as E
 import Control.Monad.IO.Unlift
@@ -30,7 +30,10 @@ import Data.Maybe
 import Network.URI.TLD (parseTLDText)
 import Data.Aeson.Types (Parser)
 import GHC.Generics
-
+import qualified Data.Text.IO as TIO
+import System.IO
+import GHC.Conc
+import GHC.Conc.IO
 
 
 
@@ -44,7 +47,7 @@ type TLD = T.Text
 
 type UrlSplit = (Subdomain, Domain, TLD)
 
-data Options = Options Configs OutPut Resume
+data Options = Options Configs Resume
 
 type CssSelector = String
 
@@ -150,7 +153,7 @@ instance FromJSON Env where
 
 data AppContext = AppContext {
     _apEnv :: Env
-  , _apDb :: !(TVar FilePath)
+  , _apDb :: Handle
   , _apQueue :: !(TQueue QuedUrl)
   , _apProccessedUrls ::  !(TVar (S.Set Url))
   , _apWorkerCount :: !(TVar Int)
@@ -180,9 +183,6 @@ instance HasEnv AppContext where
   workers = apEnv . workers
   targets = apEnv . targets
 
--- instance HasTarget AppContext where
---   targetId = apEnv .
-
 class Monad m => DataSource m where
   storeToSource :: UrlData -> m ()
   notProcessed :: T.Text -> m Bool
@@ -190,10 +190,10 @@ class Monad m => DataSource m where
 
 instance DataSource AppIO where
   storeToSource a = do
-    mPath <- asks _apDb
+    path <- asks $ _output . _apEnv
+    fh <- asks _apDb
     liftIO $ C.putStrLn (encode a)
-    -- path <- liftIO $ atomically (readTVar mPath)
-    -- liftIO $ writeFile path (show a)
+    liftIO $ C.hPut fh (encode a)
   notProcessed a = do
     mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
