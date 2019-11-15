@@ -43,7 +43,7 @@ makeAppContext :: Env -> IO AppContext
 makeAppContext env = do
   apDb <- openFile (_output env) AppendMode
   apProccessedUrls <- newTVarIO S.empty :: IO (TVar (S.Set Url))
-  let urlsQ = S.fromList $ map (\x -> (_targetId x, (T.pack . _startingUrl) x)) (_targets env)
+  let urlsQ = S.fromList $ map (\x -> (_targetName x, (T.pack . _startingUrl) x)) (_targets env)
   apQueue <- newTQueueIO :: IO (TQueue QuedUrl)
   atomically $ mapM_ (writeTQueue apQueue) urlsQ
   apWorkerCount <- newTVarIO (_workers env) :: IO (TVar Int)
@@ -75,8 +75,3 @@ main :: IO ()
 main = either renderError runProgram
      =<< makeAppConfigs
      =<< execParser opts
-
--- main :: IO ()
--- main = do
---   (Options a b c) <- execParser opts
---   writeFile b "hello"

@@ -9,16 +9,12 @@ module Lib (
 import Types
 
 import Control.Concurrent
-import Control.Concurrent.STM
-import Control.Lens.Getter (view)
 import Control.Monad
 import Control.Monad.Loops
 import Control.Monad.Trans
-import Data.Text.Internal (showText)
 import qualified Text.HandsomeSoup as HS
 import Text.XML.HXT.Core
 import Text.XML.HXT.CSS
-import Text.XML.HXT.Curl
 import qualified Data.Text as T
 import Control.Monad.Reader.Class (MonadReader)
 import Control.Lens.Getter
@@ -26,7 +22,6 @@ import Control.Monad.Reader
 import Text.Regex.TDFA
 import Network.URI.TLD (parseTLDText)
 import Data.Maybe
-import Debug.Trace as DT
 
 
 
@@ -61,8 +56,8 @@ processUrl qUrl@(id, url) = do
   env <- ask
   (rc, body) <- send url
   let target = getTarget id (env ^. targets)
-  let css = _selectors $ target
-  let urlData = scrapeDocument css body rc qUrl
+  let cssSelectors = _selectors $ target
+  let urlData = scrapeDocument cssSelectors body rc qUrl
   storeProcessed url
   maybe (pure ()) storeToSource urlData
   let links = map T.pack
@@ -77,8 +72,8 @@ processUrl qUrl@(id, url) = do
   logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
 
 
-getTarget :: TargetId -> [Target] -> Target
-getTarget id targets = head $ filter ((==) id . _targetId) targets
+getTarget :: TargetName -> [Target] -> Target
+getTarget id targets = head $ filter ((==) id . _targetName) targets
 
 urlCleanse :: UrlSplit -> [Url] -> [Url]
 urlCleanse uSpl@(_, domain, tld) urls
@@ -114,7 +109,7 @@ scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . document
                                                    docs = map T.pack $ extractContent cssSelector doc
                                                in Matches { selector = s, name = (_name s), documents = docs }
                                      in if null matches then Nothing
-                                        else Just $ UrlData { url = url, matches = matches, targetId = id, responseCode = rc}
+                                        else Just $ UrlData { url = url, matches = matches, targetName = id, responseCode = rc}
 
 
 extractContent :: CssSelector -> PageData -> [String]

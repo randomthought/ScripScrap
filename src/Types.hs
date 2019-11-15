@@ -17,12 +17,13 @@ import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
 import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
-import qualified Data.ByteString.Char8 as C
+import qualified Data.ByteString.Char8 as C8
+import qualified Data.ByteString.Lazy as BL
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
 import qualified Data.Set as S
 import Data.Yaml
 import Data.Yaml.Config
--- import qualified Data.Aeson as A
+import qualified Data.Aeson as A
 import Control.Monad.Except
 import qualified Control.Exception as E
 import Control.Monad.IO.Unlift
@@ -38,7 +39,9 @@ import GHC.Conc.IO
 
 
 type Configs = FilePath
+
 type OutPut = FilePath
+
 type Resume = Bool
 
 type Subdomain = T.Text
@@ -91,16 +94,16 @@ instance ToJSON Matches where
 type ResponseCode = Int
 
 data UrlData = UrlData {
-    targetId :: Int
-  , url :: T.Text
+    targetName :: TargetName
+  , url :: Url
   , responseCode :: ResponseCode
   , matches :: [Matches]
   }
  deriving (Show, Eq)
 
-instance ToJSON UrlData where
+instance A.ToJSON UrlData where
   toJSON urlData = object [
-      "targetId" .= targetId urlData
+      "targetName" .= targetName urlData
     , "url" .= url urlData
     , "responseCode" .= responseCode urlData
     , "matches" .= matches urlData
@@ -111,14 +114,14 @@ type Domain = T.Text
 
 type Pattern = String
 
-type TargetId = Int
+type TargetName = T.Text
 
-type QuedUrl = (TargetId, Url)
+type QuedUrl = (TargetName, Url)
 
 
 data Target = Target
   {
-    _targetId :: TargetId
+    _targetName :: TargetName
   , _startingUrl :: String
   , _urlSplit :: UrlSplit
   , _selectors :: [SelectorProfile]
@@ -129,13 +132,13 @@ data Target = Target
 
 instance FromJSON Target where
   parseJSON = withObject  "env" $ \m -> do
-    targetId_ <- m .: "targetId"
+    targetName_ <- m .: "targetName"
     startingUrl_ <- m .: "startingUrl"
     let urlSplit_ = fromJust $ parseTLDText (T.pack startingUrl_)
     selectors_ <- m .: "selectors"
     excludedPatterns_ <- m .:? "excludePatterns" .!= []
     includedPatterns_ <- m .:? "includePatterns"  .!= []
-    return $ Target targetId_ startingUrl_ urlSplit_ selectors_ excludedPatterns_ includedPatterns_
+    return $ Target targetName_ startingUrl_ urlSplit_ selectors_ excludedPatterns_ includedPatterns_
 
 data Env = Env {
     _workers :: Int
@@ -192,8 +195,9 @@ instance DataSource AppIO where
   storeToSource a = do
     path <- asks $ _output . _apEnv
     fh <- asks _apDb
-    liftIO $ C.putStrLn (encode a)
-    liftIO $ C.hPut fh (encode a)
+    let str = BL.append (BL.fromStrict $ C8.pack "\n") (A.encode a)
+    liftIO $ BL.hPut fh str
+
   notProcessed a = do
     mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
@@ -216,10 +220,10 @@ instance Queue AppIO where
     liftIO $ atomically (writeTQueue queue a)
 
 class Monad m => Logger m where
-  logMessage :: Show a => a -> m ()
+  logMessage ::  String -> m ()
 
 instance Logger AppIO where
-  logMessage a = liftIO $ putStrLn $ show a
+  logMessage a = liftIO $ putStrLn a
 
 
 type Response = (ResponseCode, String)
