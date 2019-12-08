@@ -1,10 +1,10 @@
-name:                LinkScraper
+name:                ScripScrap
 version:             0.1.0.0
-github:              "githubuser/LinkScraper"
+github:              "github.com/randomthought/ScripScrap"
 license:             BSD3
-author:              "Author name here"
+author:              "Malcolm Mulong"
 maintainer:          "example@example.com"
-copyright:           "2019 Author name here"
+copyright:           "2019 Author Malcolm Mulong"
 
 extra-source-files:
 - README.md
@@ -17,7 +17,7 @@ extra-source-files:
 # To avoid duplicated efforts in documentation and dealing with the
 # complications of embedding Haddock markup inside cabal files, it is
 # common to point users to the README.md file.
-description:         Please see the README on GitHub at <https://github.com/randomthought/LinkScraper#readme>
+description:         Please see the README on GitHub at <https://github.com/randomthought/ScripScrap/blob/master/README.md>
 
 dependencies:
 - base >= 4.7 && < 5
@@ -48,12 +48,13 @@ dependencies:
 - regex-tdfa
 - tld
 - wreq
+- hashable
 
 library:
   source-dirs: src
 
 executables:
-  LinkScraper-exe:
+  ScripScrap-exe:
     main:                Main.hs
     source-dirs:         app
     ghc-options:
@@ -61,10 +62,10 @@ executables:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - LinkScraper
+    - ScripScrap
 
 tests:
-  LinkScraper-test:
+  ScripScrap-test:
     main:                Spec.hs
     source-dirs:         test
     ghc-options:
@@ -72,4 +73,4 @@ tests:
     - -rtsopts
     - -with-rtsopts=-N
     dependencies:
-    - LinkScraper
+    - ScripScrap

@@ -4,6 +4,7 @@
 
 module Lib (
   worker
+  , createStartingQueue
 ) where
 
 import Types
@@ -57,7 +58,9 @@ processUrl qUrl@(id, url) = do
   (rc, body) <- send url
   let target = getTarget id (env ^. targets)
   let cssSelectors = _selectors $ target
-  let urlData = scrapeDocument cssSelectors body rc qUrl
+  let url' = T.unpack url
+  let containsContents = any (\p -> url' =~ p) (_extractPatterns target)
+  let urlData = if containsContents then scrapeDocument cssSelectors body rc qUrl else Nothing
   storeProcessed url
   maybe (pure ()) storeToSource urlData
   let links = map T.pack
@@ -107,10 +110,15 @@ scrapeDocument :: [SelectorProfile] -> PageData -> ResponseCode -> QuedUrl -> Ma
 scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . documents) $ map f ss
                                          f s = let cssSelector = _selector s
                                                    docs = map T.pack $ extractContent cssSelector doc
-                                               in Matches { selector = s, name = (_name s), documents = docs }
+                                               in Matches { selector = cssSelector, name = (_name s), documents = docs }
                                      in if null matches then Nothing
                                         else Just $ UrlData { url = url, matches = matches, targetName = id, responseCode = rc}
 
 
 extractContent :: CssSelector -> PageData -> [String]
 extractContent s doc = runLA (hread >>> css s //> getText) doc
+
+createStartingQueue :: Target -> [QuedUrl]
+createStartingQueue t = map f (_startingUrls t)
+  where f s = (target, T.pack s)
+        target = (_targetName t)

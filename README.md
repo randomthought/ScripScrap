@@ -1,4 +1,4 @@
-# LinkScraper
+# ScripScrap
 A fast concurrent user friendly CLI spider scraper built in haskell. Please
 use responsibly.
 
@@ -42,17 +42,24 @@ workers: 5 # Number of workers you wish to use.
 output: /tmp/scrape.txt # Location to save the scrapped data.
 targets:
   - targetName: hacker news
-    startingUrl: https://news.ycombinator.com # Website to start
+    startingUrls: 
+      - https://news.ycombinator.com # Website to start
+    extractPatters: # The regex pattern of the url that contains patterns you wish to extract
+      - news
     includePatterns: # Postfix Regex patterns that match on discivered urls you wish to scrape
-      - news.ycombinator.com/news
+      - news.ycombinator.com
     selectors: # CSS selectors containing that should match the content to be scraped
       - name: Post Title
         selector: .storylink
   # Adding another target example below
   - targetName: wikipedia
-    startingUrl: https://en.wikipedia.org/wiki/Ferrari_F50
-    includePatterns:
-      - "en.wikipedia.org"
+    startingUrls:
+      - https://en.wikipedia.org/wiki/Ferrari_F50
+      - https://en.wikipedia.org/wiki/Ferrari_Portofino
+    extractPatters:
+      - Ferrari
+    includePatterns: # Only search for pages within the english wikipedia
+      - en.wikipedia.org
     selectors:
       - name: title
         selector: .fn

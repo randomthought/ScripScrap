@@ -35,6 +35,7 @@ import qualified Data.Text.IO as TIO
 import System.IO
 import GHC.Conc
 import GHC.Conc.IO
+import Data.Hashable (hash)
 
 
 
@@ -78,7 +79,7 @@ instance ToJSON SelectorProfile where
     ]
 
 data Matches = Matches
-  { selector :: SelectorProfile
+  { selector :: CssSelector
   , name :: T.Text
   , documents :: [T.Text]
   }
@@ -122,9 +123,10 @@ type QuedUrl = (TargetName, Url)
 data Target = Target
   {
     _targetName :: TargetName
-  , _startingUrl :: String
+  , _startingUrls :: [String]
   , _urlSplit :: UrlSplit
   , _selectors :: [SelectorProfile]
+  , _extractPatterns :: [Pattern]
   , _excludePatterns :: [Pattern]
   , _includePatterns :: [Pattern]
   }
@@ -133,12 +135,13 @@ data Target = Target
 instance FromJSON Target where
   parseJSON = withObject  "env" $ \m -> do
     targetName_ <- m .: "targetName"
-    startingUrl_ <- m .: "startingUrl"
-    let urlSplit_ = fromJust $ parseTLDText (T.pack startingUrl_)
+    startingUrls_ <- m .: "startingUrls"
+    let urlSplit_ = fromJust $ parseTLDText (T.pack $ head startingUrls_)
     selectors_ <- m .: "selectors"
+    extractPatterns_ <- m .:? "extractPatterns" .!= []
     excludedPatterns_ <- m .:? "excludePatterns" .!= []
     includedPatterns_ <- m .:? "includePatterns"  .!= []
-    return $ Target targetName_ startingUrl_ urlSplit_ selectors_ excludedPatterns_ includedPatterns_
+    return $ Target targetName_ startingUrls_ urlSplit_ selectors_ extractPatterns_ excludedPatterns_ includedPatterns_
 
 data Env = Env {
     _workers :: Int
@@ -158,7 +161,7 @@ data AppContext = AppContext {
     _apEnv :: Env
   , _apDb :: Handle
   , _apQueue :: !(TQueue QuedUrl)
-  , _apProccessedUrls ::  !(TVar (S.Set Url))
+  , _apProccessedUrls ::  !(TVar (S.Set Int))
   , _apWorkerCount :: !(TVar Int)
   }
 makeClassy ''AppContext
@@ -193,7 +196,6 @@ class Monad m => DataSource m where
 
 instance DataSource AppIO where
   storeToSource a = do
-    path <- asks $ _output . _apEnv
     fh <- asks _apDb
     let str = BL.append (BL.fromStrict $ C8.pack "\n") (A.encode a)
     liftIO $ BL.hPut fh str
@@ -201,10 +203,12 @@ instance DataSource AppIO where
   notProcessed a = do
     mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
-    return $ S.notMember a processed
+    let h = hash a
+    return $ S.notMember h processed
   storeProcessed a = do
     mProcessed <- asks _apProccessedUrls
-    liftIO $ atomically (modifyTVar mProcessed $ S.insert a)
+    let h = hash a
+    liftIO $ atomically (modifyTVar mProcessed $ S.insert h)
 
 
 class Monad m => Queue m where

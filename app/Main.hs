@@ -42,8 +42,8 @@ restoreAppContext ac = error "Not Implemented"
 makeAppContext :: Env -> IO AppContext
 makeAppContext env = do
   apDb <- openFile (_output env) AppendMode
-  apProccessedUrls <- newTVarIO S.empty :: IO (TVar (S.Set Url))
-  let urlsQ = S.fromList $ map (\x -> (_targetName x, (T.pack . _startingUrl) x)) (_targets env)
+  apProccessedUrls <- newTVarIO S.empty :: IO (TVar (S.Set Int))
+  let urlsQ = S.fromList $ concat $ map createStartingQueue (_targets env)
   apQueue <- newTQueueIO :: IO (TQueue QuedUrl)
   atomically $ mapM_ (writeTQueue apQueue) urlsQ
   apWorkerCount <- newTVarIO (_workers env) :: IO (TVar Int)
