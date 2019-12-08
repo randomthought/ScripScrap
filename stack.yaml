@@ -3,4 +3,5 @@ packages:
 - .
 extra-deps:
   - tld-0.3.0.2@sha256:d56dbfe657c2efa946dd29ae70e4a7f8a0025b8adf9e6d216cdc1f60c67b40a2,3257
+  - bloomfilter-2.0.1.0@sha256:5b67d765315fb2abc1cde85e3c20ae1badfbe8d1070ed57525b7c428586e2d2f,1728
 resolver: lts-14.13

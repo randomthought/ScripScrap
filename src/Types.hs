@@ -17,6 +17,7 @@ import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
 import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 import qualified Data.ByteString.Char8 as C8
 import qualified Data.ByteString.Lazy as BL
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
@@ -31,11 +32,11 @@ import Data.Maybe
 import Network.URI.TLD (parseTLDText)
 import Data.Aeson.Types (Parser)
 import GHC.Generics
-import qualified Data.Text.IO as TIO
 import System.IO
 import GHC.Conc
 import GHC.Conc.IO
 import Data.Hashable (hash)
+import qualified Data.BloomFilter as BF
 
 
 
@@ -60,6 +61,8 @@ type PageData = String
 type Links = Int
 
 type Url = T.Text
+
+type Response = (ResponseCode, String)
 
 data SelectorProfile = Selector {
     _name :: T.Text
@@ -146,6 +149,7 @@ instance FromJSON Target where
 data Env = Env {
     _workers :: Int
   , _output :: FilePath
+  , _visited :: FilePath
   , _targets :: [Target]
   }
   deriving Show
@@ -155,13 +159,16 @@ instance FromJSON Env where
   parseJSON = withObject  "env" $ \m -> Env
     <$> m .:? "workers" .!= 5
     <*> m .: "output"
+    <*> m .: "visited"
     <*> m .: "targets"
 
+type FileLock = TMVar Handle
+
 data AppContext = AppContext {
-    _apEnv :: Env
-  , _apDb :: Handle
+    _apEnv :: !Env
+  , _apDb :: !FileLock
   , _apQueue :: !(TQueue QuedUrl)
-  , _apProccessedUrls ::  !(TVar (S.Set Int))
+  , _apProccessedUrls ::  !(TVar (BF.Bloom String), FileLock)
   , _apWorkerCount :: !(TVar Int)
   }
 makeClassy ''AppContext
@@ -196,19 +203,23 @@ class Monad m => DataSource m where
 
 instance DataSource AppIO where
   storeToSource a = do
-    fh <- asks _apDb
-    let str = BL.append (BL.fromStrict $ C8.pack "\n") (A.encode a)
-    liftIO $ BL.hPut fh str
+    fileLock <- asks _apDb
+    fh <- liftIO $ atomically (takeTMVar fileLock)
+    liftIO $ hPutStrLn fh (show a)
+    liftIO $ atomically (putTMVar fileLock fh)
 
   notProcessed a = do
-    mProcessed <- asks _apProccessedUrls
+    (mProcessed, _) <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
-    let h = hash a
-    return $ S.notMember h processed
+    let a' = T.unpack a
+    return $ BF.notElem a' processed
   storeProcessed a = do
-    mProcessed <- asks _apProccessedUrls
-    let h = hash a
-    liftIO $ atomically (modifyTVar mProcessed $ S.insert h)
+    let a' = T.unpack a
+    (mProcessed, fileLock) <- asks _apProccessedUrls
+    liftIO $ atomically (modifyTVar mProcessed $ BF.insert a')
+    fh <- liftIO $ atomically (takeTMVar fileLock)
+    liftIO $ hPutStrLn fh a'
+    liftIO $ atomically (putTMVar fileLock fh)
 
 
 class Monad m => Queue m where
@@ -223,14 +234,12 @@ instance Queue AppIO where
     queue <- asks _apQueue
     liftIO $ atomically (writeTQueue queue a)
 
+
 class Monad m => Logger m where
   logMessage ::  String -> m ()
 
 instance Logger AppIO where
   logMessage a = liftIO $ putStrLn a
-
-
-type Response = (ResponseCode, String)
 
 class Monad m => Requests m where
   send :: Url -> m Response
@@ -242,6 +251,7 @@ instance Requests AppIO where
     let code = respStatus resp
     let body = respBody resp
     return (code, body)
+
 
 class (Monad m) => WorkerState m where
   decrimentWorkerCount :: m ()

@@ -22,6 +22,9 @@ import Control.Monad.Except
 import qualified Control.Exception as E
 import System.EasyFile -- (getPermissions, takeDirectorym, Permissions(..))
 import System.IO
+import qualified Data.BloomFilter as BF
+import qualified Data.BloomFilter.Mutable as BFM
+import Data.BloomFilter.Hash (hashes)
 
 renderError :: AppError -> IO ()
 renderError e = do
@@ -41,8 +44,14 @@ restoreAppContext ac = error "Not Implemented"
 
 makeAppContext :: Env -> IO AppContext
 makeAppContext env = do
-  apDb <- openFile (_output env) AppendMode
-  apProccessedUrls <- newTVarIO S.empty :: IO (TVar (S.Set Int))
+  apDbFh <- openFile (_output env) AppendMode
+  apDb <- newTMVarIO apDbFh
+  -- visitedContents <- readFile (_visited env)
+  -- let bloomFilter = BF.fromList (hashes 16) 47925292 (lines visitedContents)
+  let bloomFilter = BF.empty (hashes 16) 47925292 :: BF.Bloom String
+  proccessedUrls <- newTVarIO bloomFilter :: IO (TVar (BF.Bloom String))
+  fh <- openFile (_visited env) AppendMode
+  visitedLock <- newTMVarIO fh
   let urlsQ = S.fromList $ concat $ map createStartingQueue (_targets env)
   apQueue <- newTQueueIO :: IO (TQueue QuedUrl)
   atomically $ mapM_ (writeTQueue apQueue) urlsQ
@@ -51,9 +60,12 @@ makeAppContext env = do
     _apEnv = env
   , _apDb  = apDb
   , _apQueue =  apQueue
-  , _apProccessedUrls = apProccessedUrls
+  , _apProccessedUrls = (proccessedUrls, visitedLock)
   , _apWorkerCount = apWorkerCount
     }
+
+populateVisited :: Handle -> BF.Bloom String -> IO (BF.Bloom String)
+populateVisited fh bf = error "Not implemented"
 
 runProgram :: AppContext -> IO ()
 runProgram ac = runReaderT (unAppIO run) ac
