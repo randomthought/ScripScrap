@@ -18,10 +18,7 @@ import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
-import qualified Data.ByteString.Char8 as C8
-import qualified Data.ByteString.Lazy as BL
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
-import qualified Data.Set as S
 import Data.Yaml
 import Data.Yaml.Config
 import qualified Data.Aeson as A
@@ -35,7 +32,6 @@ import GHC.Generics
 import System.IO
 import GHC.Conc
 import GHC.Conc.IO
-import Data.Hashable (hash)
 import qualified Data.BloomFilter as BF
 
 
@@ -142,9 +138,9 @@ instance FromJSON Target where
     let urlSplit_ = fromJust $ parseTLDText (T.pack $ head startingUrls_)
     selectors_ <- m .: "selectors"
     extractPatterns_ <- m .:? "extractPatterns" .!= []
-    excludedPatterns_ <- m .:? "excludePatterns" .!= []
-    includedPatterns_ <- m .:? "includePatterns"  .!= []
-    return $ Target targetName_ startingUrls_ urlSplit_ selectors_ extractPatterns_ excludedPatterns_ includedPatterns_
+    excludePatterns_ <- m .:? "excludePatterns" .!= []
+    includePatterns_ <- m .:? "includePatterns"  .!= []
+    return $ Target targetName_ startingUrls_ urlSplit_ selectors_ extractPatterns_ excludePatterns_ includePatterns_
 
 data Env = Env {
     _workers :: Int

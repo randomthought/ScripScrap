@@ -48,7 +48,6 @@ dependencies:
 - regex-tdfa
 - tld
 - wreq
-- hashable
 
 library:
   source-dirs: src
