@@ -195,6 +195,7 @@ instance HasEnv AppContext where
 class Monad m => DataSource m where
   storeToSource :: UrlData -> m ()
   notProcessed :: T.Text -> m Bool
+  filterProcessed :: [T.Text] -> m [T.Text]
   storeProcessed :: T.Text -> m ()
 
 instance DataSource AppIO where
@@ -203,16 +204,21 @@ instance DataSource AppIO where
     fh <- liftIO $ atomically (takeTMVar fileLock)
     liftIO $ hPutStrLn fh (show a)
     liftIO $ atomically (putTMVar fileLock fh)
-
   notProcessed a = do
     (mProcessed, _) <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
     let a' = T.unpack a
     return $ BF.notElem a' processed
+  filterProcessed as = do
+    (mProcessed, _) <- asks _apProccessedUrls
+    processed <- liftIO $ atomically (readTVar mProcessed)
+    let as' = map T.unpack as
+    let np = map T.pack $ filter (\x -> BF.notElem x processed) as'
+    return np
+
   storeProcessed a = do
     let a' = T.unpack a
-    (mProcessed, fileLock) <- asks _apProccessedUrls
-    liftIO $ atomically (modifyTVar mProcessed $ BF.insert a')
+    (_, fileLock) <- asks _apProccessedUrls
     fh <- liftIO $ atomically (takeTMVar fileLock)
     liftIO $ hPutStrLn fh a'
     liftIO $ atomically (putTMVar fileLock fh)
@@ -226,9 +232,13 @@ instance Queue AppIO where
   pop = do
     queue <- asks _apQueue
     liftIO $ atomically (tryReadTQueue queue)
-  push a = do
+  push a@(id, url) = do
     queue <- asks _apQueue
-    liftIO $ atomically (writeTQueue queue a)
+    (mProcessed, _) <- asks _apProccessedUrls
+    bf <- liftIO $ readTVarIO mProcessed
+    let url' = T.unpack url
+    liftIO$ if BF.elem url' bf then pure () else
+      atomically (modifyTVar mProcessed $ BF.insert url') >> atomically (writeTQueue queue a)
 
 
 class Monad m => Logger m where

@@ -46,10 +46,8 @@ makeAppContext :: Env -> IO AppContext
 makeAppContext env = do
   apDbFh <- openFile (_output env) AppendMode
   apDb <- newTMVarIO apDbFh
-  -- visitedContents <- readFile (_visited env)
-  -- let bloomFilter = BF.fromList (hashes 16) 47925292 (lines visitedContents)
   let bloomFilter = BF.empty (hashes 16) 47925292 :: BF.Bloom String
-  proccessedUrls <- newTVarIO bloomFilter :: IO (TVar (BF.Bloom String))
+  processedUrls <- newTVarIO bloomFilter :: IO (TVar (BF.Bloom String))
   fh <- openFile (_visited env) AppendMode
   visitedLock <- newTMVarIO fh
   let urlsQ = S.fromList $ concat $ map createStartingQueue (_targets env)
@@ -60,7 +58,7 @@ makeAppContext env = do
     _apEnv = env
   , _apDb  = apDb
   , _apQueue =  apQueue
-  , _apProccessedUrls = (proccessedUrls, visitedLock)
+  , _apProccessedUrls = (processedUrls, visitedLock)
   , _apWorkerCount = apWorkerCount
     }
 

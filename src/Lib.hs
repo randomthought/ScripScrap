@@ -61,7 +61,6 @@ processUrl qUrl@(id, url) = do
   let url' = T.unpack url
   let containsContents = any (\p -> url' =~ p) (_extractPatterns target)
   let urlData = if containsContents then scrapeDocument cssSelectors body rc qUrl else Nothing
-  storeProcessed url
   maybe (pure ()) storeToSource urlData
   let links = map T.pack
               $ filter (\x -> all (not . (x =~)) (_excludePatterns target))
@@ -69,8 +68,9 @@ processUrl qUrl@(id, url) = do
               $ map T.unpack
               $ urlCleanse (_urlSplit target)
               $ extractLinks body
-  newUrls <- filterM notProcessed links
+  newUrls <-  filterProcessed links
   mapM_ (\url' -> push (id, url')) newUrls
+  storeProcessed url
   threadid <- liftIO myThreadId
   logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
 
