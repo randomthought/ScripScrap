@@ -7,6 +7,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE TemplateHaskell #-}
 {-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE LambdaCase #-}
 -- |
 
 module Types where
@@ -18,10 +19,15 @@ import Control.Monad.Reader
 import Control.Concurrent.STM
 import qualified Data.Text as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.Lazy as TL
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
 import Data.Yaml
 import Data.Yaml.Config
 import qualified Data.Aeson as A
+import qualified Data.Aeson.Text as A
+import Data.Aeson.Types
+-- import Data.Aeson.Types (Parser, FromJSON, ToJSON)
 import Control.Monad.Except
 import qualified Control.Exception as E
 import Control.Monad.IO.Unlift
@@ -52,6 +58,8 @@ data Options = Options Configs Resume
 
 type CssSelector = String
 
+type XPathSelector = String
+
 type PageData = String
 
 type Links = Int
@@ -60,26 +68,37 @@ type Url = T.Text
 
 type Response = (ResponseCode, String)
 
-data SelectorProfile = Selector {
+data PageSelector = XPath T.Text | Css T.Text
+  deriving (Generic, Show, Eq)
+
+data SelectorProfile = SelectorProfile {
     _name :: T.Text
-  , _selector :: CssSelector
+  , _selector :: PageSelector
   }
   deriving (Generic, Show, Eq)
 
 instance FromJSON SelectorProfile where
-  parseJSON = withObject  "Selector" $ \m -> Selector
-    <$> m .: "name"
-    <*> m .: "selector"
+  parseJSON =
+    let f t a = case t of
+          "css"   -> return (Css a)
+          "xpath" -> return (XPath a)
+          _       -> fail $ "Unkown Selector type: " ++ t
+    in withObject  "SelectorProfile" $ \m -> do
+      name_ <- m .: "name"
+      type_ <- m .: "type" :: Parser String
+      selectorStr_ <- m .: "selector" :: Parser T.Text
+      selector_ <- A.withText "selector"  (f type_) (String selectorStr_)
+      return $ SelectorProfile name_ selector_
+
 
 instance ToJSON SelectorProfile where
   toJSON selectorProfile = object [
         "name" .= _name selectorProfile
-      , "selector" .= _selector selectorProfile
+      , "selector" .= (show $ _selector selectorProfile)
     ]
 
 data Matches = Matches
-  { selector :: CssSelector
-  , name :: T.Text
+  { name :: T.Text
   , documents :: [T.Text]
   }
   deriving (Show, Eq)
@@ -87,7 +106,6 @@ data Matches = Matches
 instance ToJSON Matches where
   toJSON matches = object [
       "name" .= name matches
-    , "selector" .= selector matches
     , "documents" .= documents matches
     ]
 
@@ -202,7 +220,8 @@ instance DataSource AppIO where
   storeToSource a = do
     fileLock <- asks _apDb
     fh <- liftIO $ atomically (takeTMVar fileLock)
-    liftIO $ hPutStrLn fh (show a)
+    let encoded = TL.toStrict $ A.encodeToLazyText a
+    liftIO $ T.hPutStrLn fh encoded
     liftIO $ atomically (putTMVar fileLock fh)
   notProcessed a = do
     (mProcessed, _) <- asks _apProccessedUrls

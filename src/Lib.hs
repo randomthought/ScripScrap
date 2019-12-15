@@ -16,6 +16,7 @@ import Control.Monad.Trans
 import qualified Text.HandsomeSoup as HS
 import Text.XML.HXT.Core
 import Text.XML.HXT.CSS
+import Text.XML.HXT.XPath.Arrows
 import qualified Data.Text as T
 import Control.Monad.Reader.Class (MonadReader)
 import Control.Lens.Getter
@@ -61,6 +62,7 @@ processUrl qUrl@(id, url) = do
   let url' = T.unpack url
   let containsContents = any (\p -> url' =~ p) (_extractPatterns target)
   let urlData = if containsContents then scrapeDocument cssSelectors body rc qUrl else Nothing
+  logMessage $ show urlData
   maybe (pure ()) storeToSource urlData
   let links = map T.pack
               $ filter (\x -> all (not . (x =~)) (_excludePatterns target))
@@ -108,15 +110,19 @@ extractLinks doc = map T.pack links
 
 scrapeDocument :: [SelectorProfile] -> PageData -> ResponseCode -> QuedUrl -> Maybe UrlData
 scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . documents) $ map f ss
-                                         f s = let cssSelector = _selector s
-                                                   docs = map T.pack $ extractContent cssSelector doc
-                                               in Matches { selector = cssSelector, name = (_name s), documents = docs }
+                                         f s = let selectors = _selector s
+                                                   docs = map T.pack $ extractContent selectors doc
+                                               in Matches { name = (_name s), documents = docs }
                                      in if null matches then Nothing
                                         else Just $ UrlData { url = url, matches = matches, targetName = id, responseCode = rc}
 
 
-extractContent :: CssSelector -> PageData -> [String]
-extractContent s doc = runLA (hread >>> css s //> getText) doc
+extractContent :: PageSelector -> PageData -> [String]
+extractContent (Css s) doc   = runLA (hread >>> css s' //> getText) doc
+  where s' = T.unpack s
+extractContent (XPath s) doc = runLA (hread >>> getXPathTrees s' //> getText) doc
+  where s' = T.unpack s
+
 
 createStartingQueue :: Target -> [QuedUrl]
 createStartingQueue t = map f (_startingUrls t)

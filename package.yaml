@@ -32,6 +32,7 @@ dependencies:
 - hxt
 - hxt-css
 - hxt-curl
+- hxt-xpath
 - HandsomeSoup
 - optparse-applicative
 # - pretty-simple
