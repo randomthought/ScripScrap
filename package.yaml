@@ -35,7 +35,7 @@ dependencies:
 - hxt-xpath
 - HandsomeSoup
 - optparse-applicative
-# - pretty-simple
+- pretty-simple
 - mtl
 - bloomfilter
 - lens
@@ -49,6 +49,8 @@ dependencies:
 - regex-tdfa
 - tld
 - wreq
+- text-format-simple
+- directory
 
 library:
   source-dirs: src

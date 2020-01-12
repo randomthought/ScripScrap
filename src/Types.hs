@@ -13,32 +13,34 @@
 module Types where
 
 
-import Control.Concurrent.STM (TVar, TQueue)
-import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
-import Control.Monad.Reader
+-- import Data.Aeson.Types (Parser, FromJSON, ToJSON)
 import Control.Concurrent.STM
-import qualified Data.Text as T
-import qualified Data.Text.IO as T
-import qualified Data.Text.Encoding as T
-import qualified Data.Text.Lazy as TL
+import Control.Concurrent.STM (TVar, TQueue)
 import Control.Lens.TH (makeClassy, makeClassyPrisms)
+import Control.Monad.Except
+import Control.Monad.IO.Unlift
+import Control.Monad.Reader
+import Data.Aeson.Types
+import Data.Aeson.Types (Parser)
+import Data.Maybe
 import Data.Yaml
 import Data.Yaml.Config
-import qualified Data.Aeson as A
-import qualified Data.Aeson.Text as A
-import Data.Aeson.Types
--- import Data.Aeson.Types (Parser, FromJSON, ToJSON)
-import Control.Monad.Except
-import qualified Control.Exception as E
-import Control.Monad.IO.Unlift
-import Data.Maybe
-import Network.URI.TLD (parseTLDText)
-import Data.Aeson.Types (Parser)
-import GHC.Generics
-import System.IO
 import GHC.Conc
 import GHC.Conc.IO
+import GHC.Generics
+import Network.Curl -- (curlGetString, curlGetResponse_, CurlOption(..) )
+import Network.URI.TLD (parseTLDText)
+import System.Directory (doesFileExist)
+import System.IO
+import qualified Control.Exception as E
+import qualified Data.Aeson as A
+import qualified Data.Aeson.Text as A
 import qualified Data.BloomFilter as BF
+import qualified Data.Map.Strict as SMap
+import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
+import qualified Data.Text.IO as T
+import qualified Data.Text.Lazy as TL
 
 
 
@@ -109,6 +111,12 @@ instance ToJSON Matches where
     , "documents" .= documents matches
     ]
 
+instance FromJSON Matches where
+  parseJSON = withObject "Matches" $ \o -> do
+    name_ <- o .: "name"
+    documents_ <- o .: "documents"
+    return $ Matches name_ documents_
+
 type ResponseCode = Int
 
 data UrlData = UrlData {
@@ -117,7 +125,7 @@ data UrlData = UrlData {
   , responseCode :: ResponseCode
   , matches :: [Matches]
   }
- deriving (Show, Eq)
+ deriving (Show, Eq, Generic)
 
 instance A.ToJSON UrlData where
   toJSON urlData = object [
@@ -127,6 +135,13 @@ instance A.ToJSON UrlData where
     , "matches" .= matches urlData
     ]
 
+instance FromJSON UrlData where
+  parseJSON = withObject "UrlData" $ \o -> do
+    targetName_ <- o .: "targetName"
+    url_ <- o .: "url"
+    responseCode_ <- o .: "responseCode"
+    matches_ <- o .: "matches"
+    return $ UrlData targetName_ url_ responseCode_ matches_
 
 type Domain = T.Text
 
@@ -136,6 +151,14 @@ type TargetName = T.Text
 
 type QuedUrl = (TargetName, Url)
 
+type FileLock = TMVar Handle
+
+data ScrapeTarget = ScrapeTarget
+  {
+    _target :: Target
+  , _visitedHandle :: FileLock
+  , _outPutHandle :: FileLock
+  }
 
 data Target = Target
   {
@@ -146,47 +169,62 @@ data Target = Target
   , _extractPatterns :: [Pattern]
   , _excludePatterns :: [Pattern]
   , _includePatterns :: [Pattern]
+  , _output :: FilePath
+  , _visited :: FilePath
   }
-  deriving (Show, Eq)
+  deriving (Eq, Show)
 
 instance FromJSON Target where
   parseJSON = withObject  "env" $ \m -> do
     targetName_ <- m .: "targetName"
+    output_ <- m .: "output"
+    visited_ <- m .: "visited"
     startingUrls_ <- m .: "startingUrls"
     let urlSplit_ = fromJust $ parseTLDText (T.pack $ head startingUrls_)
     selectors_ <- m .: "selectors"
     extractPatterns_ <- m .:? "extractPatterns" .!= []
     excludePatterns_ <- m .:? "excludePatterns" .!= []
-    includePatterns_ <- m .:? "includePatterns"  .!= []
-    return $ Target targetName_ startingUrls_ urlSplit_ selectors_ extractPatterns_ excludePatterns_ includePatterns_
+    includePatterns_ <- m .:? "includePatterns" .!= []
+    return $ Target
+      targetName_
+      startingUrls_
+      urlSplit_
+      selectors_
+      extractPatterns_
+      excludePatterns_
+      includePatterns_
+      output_
+      visited_
+
+getFileHandle :: FilePath -> IOMode -> IO Handle
+getFileHandle fp mode = do
+  exist <- doesFileExist fp
+  fh <- if not exist then writeFile fp "" >> openFile fp mode else openFile fp mode
+  return fh
+
+data AppConfig = AppConfig {
+    _appCorkers :: Int
+  , _appCtargets :: [Target]
+  }
+
+instance FromJSON AppConfig where
+  parseJSON = withObject  "env" $ \m -> AppConfig
+    <$> m .:? "workers" .!= 5
+    <*> m .: "targets"
 
 data Env = Env {
     _workers :: Int
-  , _output :: FilePath
-  , _visited :: FilePath
-  , _targets :: [Target]
+  , _targets :: SMap.Map TargetName ScrapeTarget
   }
-  deriving Show
 makeClassy ''Env
-
-instance FromJSON Env where
-  parseJSON = withObject  "env" $ \m -> Env
-    <$> m .:? "workers" .!= 5
-    <*> m .: "output"
-    <*> m .: "visited"
-    <*> m .: "targets"
-
-type FileLock = TMVar Handle
 
 data AppContext = AppContext {
     _apEnv :: !Env
-  , _apDb :: !FileLock
   , _apQueue :: !(TQueue QuedUrl)
-  , _apProccessedUrls ::  !(TVar (BF.Bloom String), FileLock)
+  , _apProccessedUrls ::  !(TVar (BF.Bloom String))
   , _apWorkerCount :: !(TVar Int)
   }
 makeClassy ''AppContext
-
 
 data AppError = IOError String
   deriving Show
@@ -206,41 +244,42 @@ newtype AppIO a =
            -- , MonadBaseControl IO) -- MonadUnliftIO)
 
 instance HasEnv AppContext where
-  output = apEnv . output
+  -- output = apEnv . output
   workers = apEnv . workers
   targets = apEnv . targets
 
 class Monad m => DataSource m where
   storeToSource :: UrlData -> m ()
+  storeProcessed :: QuedUrl -> m ()
   notProcessed :: T.Text -> m Bool
   filterProcessed :: [T.Text] -> m [T.Text]
-  storeProcessed :: T.Text -> m ()
 
 instance DataSource AppIO where
   storeToSource a = do
-    fileLock <- asks _apDb
+    env <- asks _apEnv
+    let fileLock = _outPutHandle $ fromJust $ SMap.lookup (targetName a) (_targets env)
     fh <- liftIO $ atomically (takeTMVar fileLock)
     let encoded = TL.toStrict $ A.encodeToLazyText a
     liftIO $ T.hPutStrLn fh encoded
     liftIO $ atomically (putTMVar fileLock fh)
+  storeProcessed (k, url) = do
+    env <- asks _apEnv
+    let fileLock = _visitedHandle $ fromJust $ SMap.lookup k (_targets env)
+    fh <- liftIO $ atomically (takeTMVar fileLock)
+    let url' = T.unpack url
+    liftIO $ hPutStrLn fh url'
+    liftIO $ atomically (putTMVar fileLock fh)
   notProcessed a = do
-    (mProcessed, _) <- asks _apProccessedUrls
+    mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
     let a' = T.unpack a
     return $ BF.notElem a' processed
   filterProcessed as = do
-    (mProcessed, _) <- asks _apProccessedUrls
+    mProcessed <- asks _apProccessedUrls
     processed <- liftIO $ atomically (readTVar mProcessed)
     let as' = map T.unpack as
     let np = map T.pack $ filter (\x -> BF.notElem x processed) as'
     return np
-
-  storeProcessed a = do
-    let a' = T.unpack a
-    (_, fileLock) <- asks _apProccessedUrls
-    fh <- liftIO $ atomically (takeTMVar fileLock)
-    liftIO $ hPutStrLn fh a'
-    liftIO $ atomically (putTMVar fileLock fh)
 
 
 class Monad m => Queue m where
@@ -253,7 +292,7 @@ instance Queue AppIO where
     liftIO $ atomically (tryReadTQueue queue)
   push a@(id, url) = do
     queue <- asks _apQueue
-    (mProcessed, _) <- asks _apProccessedUrls
+    mProcessed <- asks _apProccessedUrls
     bf <- liftIO $ readTVarIO mProcessed
     let url' = T.unpack url
     liftIO$ if BF.elem url' bf then pure () else

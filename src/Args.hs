@@ -1,4 +1,4 @@
--- | 
+-- |
 
 module Args (
   opts
@@ -6,7 +6,6 @@ module Args (
 
 
 import Types
-
 import Options.Applicative
 import Data.Semigroup ((<>))
 

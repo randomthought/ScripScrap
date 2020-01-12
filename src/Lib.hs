@@ -10,20 +10,23 @@ module Lib (
 import Types
 
 import Control.Concurrent
+import Control.Lens.Getter
 import Control.Monad
 import Control.Monad.Loops
-import Control.Monad.Trans
-import qualified Text.HandsomeSoup as HS
-import Text.XML.HXT.Core
-import Text.XML.HXT.CSS
-import Text.XML.HXT.XPath.Arrows
-import qualified Data.Text as T
-import Control.Monad.Reader.Class (MonadReader)
-import Control.Lens.Getter
 import Control.Monad.Reader
-import Text.Regex.TDFA
-import Network.URI.TLD (parseTLDText)
+import Control.Monad.Reader.Class (MonadReader)
+import Control.Monad.Trans
 import Data.Maybe
+import Network.URI.TLD (parseTLDText)
+import Text.Format
+import Text.Regex.TDFA
+import Text.XML.HXT.CSS
+import Text.XML.HXT.Core
+import Text.XML.HXT.XPath.Arrows
+import qualified Data.Map.Strict as Map
+import qualified Data.Text as T
+import qualified Text.HandsomeSoup as HS
+import qualified Text.Pretty.Simple as PS
 
 
 
@@ -57,12 +60,12 @@ processUrl :: (DataSource m
 processUrl qUrl@(id, url) = do
   env <- ask
   (rc, body) <- send url
-  let target = getTarget id (env ^. targets)
+  let target = _target $ fromJust $ Map.lookup id (env ^. targets)
   let cssSelectors = _selectors $ target
   let url' = T.unpack url
   let containsContents = any (\p -> url' =~ p) (_extractPatterns target)
   let urlData = if containsContents then scrapeDocument cssSelectors body rc qUrl else Nothing
-  logMessage $ show urlData
+  -- PS.pPrint urlData
   maybe (pure ()) storeToSource urlData
   let links = map T.pack
               $ filter (\x -> all (not . (x =~)) (_excludePatterns target))
@@ -72,18 +75,15 @@ processUrl qUrl@(id, url) = do
               $ extractLinks body
   newUrls <-  filterProcessed links
   mapM_ (\url' -> push (id, url')) newUrls
-  storeProcessed url
+  storeProcessed qUrl
   threadid <- liftIO myThreadId
-  logMessage $ "Url: " ++ show url ++ "\nWith Thread: " ++ show threadid ++ "\n"
-
-
-getTarget :: TargetName -> [Target] -> Target
-getTarget id targets = head $ filter ((==) id . _targetName) targets
+  logMessage $ format "Url: {0}\nWith Thread: {1}\n" [show url, show threadid]
 
 urlCleanse :: UrlSplit -> [Url] -> [Url]
 urlCleanse uSpl@(_, domain, tld) urls
   = mapMaybe matchDomain fixedUrls
-  where fixedUrls = map (fixUrlFormat uSpl) $ filter (\x -> length (T.unpack x) > 0) urls
+  where fixedUrls = map (fixUrlFormat uSpl)
+                    $ filter (\x -> length (T.unpack x) > 0) urls
         matchDomain s = do (_, domain', tld') <- parseTLDText s
                            if (tld == tld') && (domain == domain')
                              then Just (s) else Nothing
@@ -91,8 +91,9 @@ urlCleanse uSpl@(_, domain, tld) urls
 
 fixUrlFormat :: UrlSplit -> Url -> Url
 fixUrlFormat (subDom, domain, tld) url
-  = let dom = if subDom == "" then "https://" ++ (T.unpack domain) ++ "." ++ (T.unpack tld)
-             else "https://" ++ (T.unpack subDom) ++ "." ++ (T.unpack domain) ++ "." ++ (T.unpack tld)
+  = let parsedUrl = format "https://{0}.{1}" [T.unpack domain, T.unpack tld]
+        parseUrlWithWSubDomain = format "https://{0}.{1}.{2}" [T.unpack subDom, T.unpack domain, T.unpack tld]
+        dom = if T.null subDom then parsedUrl else parseUrlWithWSubDomain
         url' = T.unpack url
     in case parseTLDText url of
          Just a ->  url
@@ -120,8 +121,10 @@ scrapeDocument ss doc rc (id, url) = let matches = filter (not . null . document
 extractContent :: PageSelector -> PageData -> [String]
 extractContent (Css s) doc   = runLA (hread >>> css s' //> getText) doc
   where s' = T.unpack s
-extractContent (XPath s) doc = runLA (hread >>> getXPathTrees s' //> getText) doc
+extractContent (XPath s) doc = filter isEmptyString $ runLA (xshow trees) doc
   where s' = T.unpack s
+        trees = hread >>> getXPathTrees s'
+        isEmptyString = not . T.null . T.strip . T.pack
 
 
 createStartingQueue :: Target -> [QuedUrl]
