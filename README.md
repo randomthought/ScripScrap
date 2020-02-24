@@ -26,17 +26,17 @@ stack install # If you want to install the program as binery.
 
 ## Usage
 
-ScripSrap relies on a configuartion file that specifies the list of "targets" you
-wish to scrape. Within each target, you specifiy the domain, xpath and/or selectors.
+ScripSrap relies on a configuration file that specifies the list of "targets" you
+wish to scrape. Within each target, you specify the domain, xpath and/or selectors.
 
 In the example below, we create a `scrape_config.yaml` file with the following
 contents. Our goal with this config is to scrape for all the post titles on
-hackernews by only looking at the main pages. The pattern urls we are interesed
+hackernews by only looking at the main pages. The pattern urls we are interested
 in is pages is `news.ycombinator.com/news`. As ScripScrap discveres new paths in
 `news.ycombinator.com` it would only discard urls that do not contain the pattern.
 
-Same gues for `wikipedia`. ScripScrap would go search for urls containing
-`en.wikipedia.org` to visit and look for pages that contain any the selected css
+Same goes for `wikipedia`. ScripScrap would go search for urls containing
+`en.wikipedia.org` then, look for pages that contain any the selected css
 and xpath information.
 
 ```yaml
@@ -47,10 +47,10 @@ targets:
       - https://news.ycombinator.com # Website to start
     extractPatters: # (Optional) The regex pattern of the url that contains data you wish to extract. Please note, url must match all patterns specified.
       - news
-    includePatterns: # (Optional) Postfix Regex patterns that match on discivered urls you wish to scrape
+    includePatterns: # (Optional) Postfix Regex patterns that match on discovered urls you wish to scrape
       - news.ycombinator.com
-   excludePatterns: # (Optional) Postfix Regex patterns that match on discivered urls you wish to scrape
-    selectors: # CSS selectors containing that should match the content to be scraped
+    excludePatterns: # (Optional) Postfix Regex patterns that match on discovered urls you do not wish to scrape
+    selectors: # CSS or Xpath selectors that should match the content to be scraped
       - name: Post Title
         type: css
         selector: .storylink
