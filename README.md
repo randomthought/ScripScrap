@@ -55,7 +55,7 @@ targets:
         type: css
         selector: .storylink
     output: /tmp/hn_data.txt # Location to save the scrapped data.
-    visited: /tmp/hn_visited.txt # Location to save urls visited the scrapped data.
+    visited: /tmp/hn_visited.txt # Location to save urls visited.
 
   # Adding another target example below
   - targetName: wikipedia
