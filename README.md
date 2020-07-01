@@ -21,23 +21,23 @@ Clone and install ScripScrap
 git clone https://github.com/randomthought/ScripScrap
 cd ScripScrap
 stack build
-stack install # If you want to install the program as binery.
+stack install # If you want to install the program as binary.
 ```
 
 ## Usage
 
 ScripSrap relies on a configuration file that specifies the list of "targets" you
-wish to scrape. Within each target, you specify the domain, xpath and/or selectors.
+wish to scrape. Within each target, you specify the domain, xpath and/or css selectors.
 
 In the example below, we create a `scrape_config.yaml` file with the following
 contents. Our goal with this config is to scrape for all the post titles on
 hackernews by only looking at the main pages. The pattern urls we are interested
-in is pages is `news.ycombinator.com/news`. As ScripScrap discveres new paths in
+in is pages is `news.ycombinator.com/news`. As ScripScrap discovers new paths in
 `news.ycombinator.com` it would only discard urls that do not contain the pattern.
 
 Same goes for `wikipedia`. ScripScrap would go search for urls containing
-`en.wikipedia.org` then, look for pages that contain any the selected css
-and xpath information.
+`en.wikipedia.org` then, look for pages that contain any of the listed css
+and xpath in the site selectors.
 
 ```yaml
 workers: 5 # Number of workers you wish to use.
@@ -77,8 +77,8 @@ targets:
     visited: /tmp/wiki_visited.txt
 ```
 
-Now that a the `scrape_config.yaml` file has been created, we can simple run
-ScripScrap using as shown below.
+Now that a `scrape_config.yaml` file has been created, we can simply run
+ScripScrap as shown below.
 
 ``` sh
 $ stack run -- -f scrape-config.yaml
